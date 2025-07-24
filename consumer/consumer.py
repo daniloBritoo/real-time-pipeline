@@ -16,12 +16,24 @@ schema = StructType([
 df = spark.readStream.format("kafka") \
         .option("kafka.bootstrap.servers", "localhost:9092") \
         .option("subscribe", "temperature_sensor")\
+        .option("maxOffsetsPerTrigger", 10)\
         .load()
+        
 df = df.selectExpr("CAST(value AS STRING) as json") \
        .select(from_json(col("json"), schema).alias("data")) \
        .select("data.*") \
        .withColumn("timestamp", to_timestamp(from_unixtime("timestamp")))
-query = df.writeStream.outputMode("append").format("console").start()
+       
+       
+query = df.writeStream \
+    .format("csv") \
+    .option("path", "streaming_insert") \
+    .option("checkpointLocation", "checkpoint/") \
+    .outputMode("append") \
+    .trigger(processingTime='10 seconds') \
+    .start()
+
+
 try:
     query.awaitTermination()
 except KeyboardInterrupt:
