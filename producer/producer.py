@@ -1,6 +1,6 @@
 from kafka import KafkaProducer
 import json, time, random
-producer = KafkaProducer(bootstrap_servers='localhost:9092')
+producer = KafkaProducer(bootstrap_servers='localhost:9092', value_serializer=lambda v: json.dumps(v).encode('utf-8'))
 
 while True:
     data = {
@@ -11,3 +11,4 @@ while True:
     print(f"enviando: {data}")
     producer.send("temperature_sensor", value=data)
     time.sleep(1)
+
