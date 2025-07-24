@@ -1,6 +1,30 @@
-from kafka import KafkaConsumer
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import from_json, col, to_timestamp, from_unixtime
+from pyspark.sql.types import *
 
-consumer = KafkaConsumer('meu-topico', bootstrap_servers='localhost:9092', auto_offset_reset='earliest')
+spark = SparkSession.builder \
+    .appName("SensorStreaming") \
+    .config("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0")\
+    .getOrCreate()
 
-for msg in consumer:
-    print(msg.value.decode('utf-8'))
+schema = StructType([
+        StructField("sensor_id", IntegerType()),
+        StructField("timestamp", DoubleType()),
+        StructField("temperature", DoubleType())
+])
+
+df = spark.readStream.format("kafka") \
+        .option("kafka.bootstrap.servers", "localhost:9092") \
+        .option("subscribe", "temperature_sensor")\
+        .load()
+df = df.selectExpr("CAST(value AS STRING) as json") \
+       .select(from_json(col("json"), schema).alias("data")) \
+       .select("data.*") \
+       .withColumn("timestamp", to_timestamp(from_unixtime("timestamp")))
+query = df.writeStream.outputMode("append").format("console").start()
+try:
+    query.awaitTermination()
+except KeyboardInterrupt:
+    print("Streaming interrompido")
+    query.stop()
+    spark.stop()
